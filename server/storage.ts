@@ -2,41 +2,49 @@ import {
   clients, type Client, type InsertClient,
   projects, type Project, type InsertProject,
   payments, type Payment, type InsertPayment,
-  activities, type Activity, type InsertActivity
+  activities, type Activity, type InsertActivity,
+  users, type User, type UpsertUser,
+  ServiceTypes
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and, gte } from "drizzle-orm";
 
 // Storage interface
 export interface IStorage {
+  // User operations
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
   // Client operations
-  getClients(): Promise<Client[]>;
+  getClients(userId: string): Promise<Client[]>;
   getClient(id: number): Promise<Client | undefined>;
-  createClient(client: InsertClient): Promise<Client>;
+  createClient(client: InsertClient, userId: string): Promise<Client>;
   updateClient(id: number, client: Partial<InsertClient>): Promise<Client | undefined>;
   deleteClient(id: number): Promise<boolean>;
 
   // Project operations
-  getProjects(): Promise<Project[]>;
+  getProjects(userId: string): Promise<Project[]>;
   getProject(id: number): Promise<Project | undefined>;
   getProjectsByClient(clientId: number): Promise<Project[]>;
-  createProject(project: InsertProject): Promise<Project>;
+  createProject(project: InsertProject, userId: string): Promise<Project>;
   updateProject(id: number, project: Partial<InsertProject>): Promise<Project | undefined>;
   deleteProject(id: number): Promise<boolean>;
 
   // Payment operations
-  getPayments(): Promise<Payment[]>;
+  getPayments(userId: string): Promise<Payment[]>;
   getPayment(id: number): Promise<Payment | undefined>;
   getPaymentsByClient(clientId: number): Promise<Payment[]>;
   getPaymentsByProject(projectId: number): Promise<Payment[]>;
-  createPayment(payment: InsertPayment): Promise<Payment>;
+  createPayment(payment: InsertPayment, userId: string): Promise<Payment>;
   updatePayment(id: number, payment: Partial<InsertPayment>): Promise<Payment | undefined>;
   deletePayment(id: number): Promise<boolean>;
 
   // Activity operations
-  getActivities(limit?: number): Promise<Activity[]>;
-  createActivity(activity: InsertActivity): Promise<Activity>;
+  getActivities(userId: string, limit?: number): Promise<Activity[]>;
+  createActivity(activity: InsertActivity, userId: string): Promise<Activity>;
 
   // Dashboard operations
-  getDashboardStats(): Promise<DashboardStats>;
+  getDashboardStats(userId: string): Promise<DashboardStats>;
 }
 
 export interface DashboardStats {
@@ -46,75 +54,95 @@ export interface DashboardStats {
   pendingInvoices: number;
 }
 
-export class MemStorage implements IStorage {
-  private clients: Map<number, Client> = new Map();
-  private projects: Map<number, Project> = new Map();
-  private payments: Map<number, Payment> = new Map();
-  private activities: Map<number, Activity> = new Map();
-  
-  private clientId = 1;
-  private projectId = 1;
-  private paymentId = 1;
-  private activityId = 1;
-
-  constructor() {
-    // Initialize with some sample data
-    this.initSampleData();
+export class DatabaseStorage implements IStorage {
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+  
   // Client operations
-  async getClients(): Promise<Client[]> {
-    return Array.from(this.clients.values()).sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  async getClients(userId: string): Promise<Client[]> {
+    return await db
+      .select()
+      .from(clients)
+      .where(eq(clients.userId, userId))
+      .orderBy(desc(clients.createdAt));
   }
 
   async getClient(id: number): Promise<Client | undefined> {
-    return this.clients.get(id);
+    const [client] = await db
+      .select()
+      .from(clients)
+      .where(eq(clients.id, id));
+    return client;
   }
 
-  async createClient(clientData: InsertClient): Promise<Client> {
-    const id = this.clientId++;
-    const now = new Date();
-    const client: Client = { 
-      ...clientData, 
-      id, 
-      createdAt: now 
-    };
-    
-    this.clients.set(id, client);
+  async createClient(clientData: InsertClient, userId: string): Promise<Client> {
+    const [client] = await db
+      .insert(clients)
+      .values({
+        ...clientData,
+        userId
+      })
+      .returning();
     
     // Create activity for client creation
     await this.createActivity({
       type: 'client_added',
       description: `New client added: ${client.name}`,
-      entityId: id,
+      entityId: client.id,
       entityType: 'client'
-    });
+    }, userId);
     
     return client;
   }
 
   async updateClient(id: number, clientData: Partial<InsertClient>): Promise<Client | undefined> {
-    const client = this.clients.get(id);
+    const [client] = await db
+      .select()
+      .from(clients)
+      .where(eq(clients.id, id));
     
     if (!client) return undefined;
     
-    const updatedClient: Client = { ...client, ...clientData };
-    this.clients.set(id, updatedClient);
+    const [updatedClient] = await db
+      .update(clients)
+      .set(clientData)
+      .where(eq(clients.id, id))
+      .returning();
     
     await this.createActivity({
       type: 'client_updated',
       description: `Client updated: ${updatedClient.name}`,
       entityId: id,
       entityType: 'client'
-    });
+    }, client.userId);
     
     return updatedClient;
   }
 
   async deleteClient(id: number): Promise<boolean> {
-    const client = this.clients.get(id);
+    const [client] = await db
+      .select()
+      .from(clients)
+      .where(eq(clients.id, id));
+    
     if (!client) return false;
     
     // Delete associated projects and payments
@@ -128,78 +156,98 @@ export class MemStorage implements IStorage {
       await this.deletePayment(payment.id);
     }
     
-    const deleted = this.clients.delete(id);
+    const deleted = await db
+      .delete(clients)
+      .where(eq(clients.id, id))
+      .returning();
     
-    if (deleted) {
+    if (deleted.length > 0) {
       await this.createActivity({
         type: 'client_deleted',
         description: `Client deleted: ${client.name}`,
         entityId: id,
         entityType: 'client'
-      });
+      }, client.userId);
+      return true;
     }
     
-    return deleted;
+    return false;
   }
 
   // Project operations
-  async getProjects(): Promise<Project[]> {
-    return Array.from(this.projects.values()).sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  async getProjects(userId: string): Promise<Project[]> {
+    return await db
+      .select()
+      .from(projects)
+      .where(eq(projects.userId, userId))
+      .orderBy(desc(projects.createdAt));
   }
 
   async getProject(id: number): Promise<Project | undefined> {
-    return this.projects.get(id);
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, id));
+    return project;
   }
 
   async getProjectsByClient(clientId: number): Promise<Project[]> {
-    return Array.from(this.projects.values())
-      .filter(project => project.clientId === clientId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return await db
+      .select()
+      .from(projects)
+      .where(eq(projects.clientId, clientId))
+      .orderBy(desc(projects.createdAt));
   }
 
-  async createProject(projectData: InsertProject): Promise<Project> {
-    const id = this.projectId++;
-    const now = new Date();
-    const project: Project = { 
-      ...projectData, 
-      id, 
-      createdAt: now 
-    };
-    
-    this.projects.set(id, project);
+  async createProject(projectData: InsertProject, userId: string): Promise<Project> {
+    const [project] = await db
+      .insert(projects)
+      .values({
+        ...projectData,
+        userId
+      })
+      .returning();
     
     await this.createActivity({
       type: 'project_created',
       description: `New project created: ${project.name}`,
-      entityId: id,
+      entityId: project.id,
       entityType: 'project'
-    });
+    }, userId);
     
     return project;
   }
 
   async updateProject(id: number, projectData: Partial<InsertProject>): Promise<Project | undefined> {
-    const project = this.projects.get(id);
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, id));
     
     if (!project) return undefined;
     
-    const updatedProject: Project = { ...project, ...projectData };
-    this.projects.set(id, updatedProject);
+    const [updatedProject] = await db
+      .update(projects)
+      .set(projectData)
+      .where(eq(projects.id, id))
+      .returning();
     
     await this.createActivity({
       type: 'project_updated',
       description: `Project updated: ${updatedProject.name}`,
       entityId: id,
       entityType: 'project'
-    });
+    }, project.userId);
     
     return updatedProject;
   }
 
   async deleteProject(id: number): Promise<boolean> {
-    const project = this.projects.get(id);
+    const [project] = await db
+      .select()
+      .from(projects)
+      .where(eq(projects.id, id));
+    
     if (!project) return false;
     
     // Delete associated payments
@@ -208,77 +256,95 @@ export class MemStorage implements IStorage {
       await this.deletePayment(payment.id);
     }
     
-    const deleted = this.projects.delete(id);
+    const deleted = await db
+      .delete(projects)
+      .where(eq(projects.id, id))
+      .returning();
     
-    if (deleted) {
+    if (deleted.length > 0) {
       await this.createActivity({
         type: 'project_deleted',
         description: `Project deleted: ${project.name}`,
         entityId: id,
         entityType: 'project'
-      });
+      }, project.userId);
+      return true;
     }
     
-    return deleted;
+    return false;
   }
 
   // Payment operations
-  async getPayments(): Promise<Payment[]> {
-    return Array.from(this.payments.values()).sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  async getPayments(userId: string): Promise<Payment[]> {
+    return await db
+      .select()
+      .from(payments)
+      .where(eq(payments.userId, userId))
+      .orderBy(desc(payments.createdAt));
   }
 
   async getPayment(id: number): Promise<Payment | undefined> {
-    return this.payments.get(id);
+    const [payment] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.id, id));
+    return payment;
   }
 
   async getPaymentsByClient(clientId: number): Promise<Payment[]> {
-    return Array.from(this.payments.values())
-      .filter(payment => payment.clientId === clientId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return await db
+      .select()
+      .from(payments)
+      .where(eq(payments.clientId, clientId))
+      .orderBy(desc(payments.createdAt));
   }
 
   async getPaymentsByProject(projectId: number): Promise<Payment[]> {
-    return Array.from(this.payments.values())
-      .filter(payment => payment.projectId === projectId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return await db
+      .select()
+      .from(payments)
+      .where(eq(payments.projectId, projectId))
+      .orderBy(desc(payments.createdAt));
   }
 
-  async createPayment(paymentData: InsertPayment): Promise<Payment> {
-    const id = this.paymentId++;
-    const now = new Date();
-    const payment: Payment = { 
-      ...paymentData, 
-      id, 
-      createdAt: now 
-    };
-    
-    this.payments.set(id, payment);
+  async createPayment(paymentData: InsertPayment, userId: string): Promise<Payment> {
+    const [payment] = await db
+      .insert(payments)
+      .values({
+        ...paymentData,
+        userId
+      })
+      .returning();
     
     await this.createActivity({
       type: 'payment_created',
       description: `New payment created: $${payment.amount}`,
-      entityId: id,
+      entityId: payment.id,
       entityType: 'payment'
-    });
+    }, userId);
     
     return payment;
   }
 
   async updatePayment(id: number, paymentData: Partial<InsertPayment>): Promise<Payment | undefined> {
-    const payment = this.payments.get(id);
+    const [payment] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.id, id));
     
     if (!payment) return undefined;
     
-    const updatedPayment: Payment = { ...payment, ...paymentData };
-    
     // If payment status changed to paid, set paidDate if not already set
-    if (paymentData.status === 'paid' && !updatedPayment.paidDate) {
-      updatedPayment.paidDate = new Date();
+    let updatedData = { ...paymentData };
+    if (paymentData.status === 'paid' && !payment.paidDate) {
+      updatedData.paidDate = new Date();
     }
     
-    this.payments.set(id, updatedPayment);
+    const [updatedPayment] = await db
+      .update(payments)
+      .set(updatedData)
+      .where(eq(payments.id, id))
+      .returning();
     
     await this.createActivity({
       type: 'payment_updated',
@@ -287,73 +353,108 @@ export class MemStorage implements IStorage {
         : `Payment updated: $${updatedPayment.amount}`,
       entityId: id,
       entityType: 'payment'
-    });
+    }, payment.userId);
     
     return updatedPayment;
   }
 
   async deletePayment(id: number): Promise<boolean> {
-    const payment = this.payments.get(id);
+    const [payment] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.id, id));
+    
     if (!payment) return false;
     
-    const deleted = this.payments.delete(id);
+    const deleted = await db
+      .delete(payments)
+      .where(eq(payments.id, id))
+      .returning();
     
-    if (deleted) {
+    if (deleted.length > 0) {
       await this.createActivity({
         type: 'payment_deleted',
         description: `Payment deleted: $${payment.amount}`,
         entityId: id,
         entityType: 'payment'
-      });
+      }, payment.userId);
+      return true;
     }
     
-    return deleted;
+    return false;
   }
 
   // Activity operations
-  async getActivities(limit?: number): Promise<Activity[]> {
-    const activities = Array.from(this.activities.values())
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  async getActivities(userId: string, limit?: number): Promise<Activity[]> {
+    const query = db
+      .select()
+      .from(activities)
+      .where(eq(activities.userId, userId))
+      .orderBy(desc(activities.createdAt));
     
-    return limit ? activities.slice(0, limit) : activities;
+    if (limit) {
+      query.limit(limit);
+    }
+    
+    return await query;
   }
 
-  async createActivity(activityData: InsertActivity): Promise<Activity> {
-    const id = this.activityId++;
-    const now = new Date();
-    const activity: Activity = { 
-      ...activityData, 
-      id, 
-      createdAt: now 
-    };
+  async createActivity(activityData: InsertActivity, userId: string): Promise<Activity> {
+    const [activity] = await db
+      .insert(activities)
+      .values({
+        ...activityData,
+        userId
+      })
+      .returning();
     
-    this.activities.set(id, activity);
     return activity;
   }
 
   // Dashboard statistics
-  async getDashboardStats(): Promise<DashboardStats> {
-    const activeClients = Array.from(this.clients.values())
-      .filter(client => client.status === 'active').length;
+  async getDashboardStats(userId: string): Promise<DashboardStats> {
+    // Get active clients count
+    const activeClients = (await db
+      .select()
+      .from(clients)
+      .where(and(
+        eq(clients.userId, userId),
+        eq(clients.status, 'active')
+      ))).length;
     
-    const activeProjects = Array.from(this.projects.values())
-      .filter(project => project.status === 'in_progress').length;
+    // Get active projects count
+    const activeProjects = (await db
+      .select()
+      .from(projects)
+      .where(and(
+        eq(projects.userId, userId),
+        eq(projects.status, 'in_progress')
+      ))).length;
     
     // Calculate monthly revenue (paid payments in the current month)
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthlyRevenue = Array.from(this.payments.values())
-      .filter(payment => 
-        payment.status === 'paid' && 
-        payment.paidDate && 
-        new Date(payment.paidDate) >= firstDayOfMonth
-      )
-      .reduce((sum, payment) => sum + payment.amount, 0);
+    const paidPayments = await db
+      .select()
+      .from(payments)
+      .where(and(
+        eq(payments.userId, userId),
+        eq(payments.status, 'paid'),
+        gte(payments.paidDate, firstDayOfMonth)
+      ));
+    
+    const monthlyRevenue = paidPayments.reduce((sum, payment) => sum + payment.amount, 0);
     
     // Calculate pending invoices (sum of pending payments)
-    const pendingInvoices = Array.from(this.payments.values())
-      .filter(payment => payment.status === 'pending')
-      .reduce((sum, payment) => sum + payment.amount, 0);
+    const pendingPayments = await db
+      .select()
+      .from(payments)
+      .where(and(
+        eq(payments.userId, userId),
+        eq(payments.status, 'pending')
+      ));
+    
+    const pendingInvoices = pendingPayments.reduce((sum, payment) => sum + payment.amount, 0);
     
     return {
       activeClients,
@@ -362,13 +463,7 @@ export class MemStorage implements IStorage {
       pendingInvoices
     };
   }
-
-  // Initialize sample data
-  private initSampleData() {
-    // This method intentionally left empty as per the guidelines
-    // Not generating sample data as per the instruction:
-    // "Never generate or implement any form of mock, sample, placeholder, synthetic, example, or test data"
-  }
 }
 
-export const storage = new MemStorage();
+// Use the database storage implementation
+export const storage = new DatabaseStorage();
