@@ -1,7 +1,6 @@
 import { Link } from "wouter";
 import { useTheme } from "./theme-provider";
 import { Search, Bell, Menu, Sun, Moon } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,6 +8,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AuthButtons } from "./auth/auth-buttons";
+import { useAuth } from "@/hooks/useAuth";
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -80,18 +81,7 @@ export function Header({ toggleSidebar }: HeaderProps) {
             <span className="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full"></span>
           </Button>
 
-          <div className="flex items-center">
-            <Avatar className="h-8 w-8">
-              <AvatarImage
-                src="https://images.unsplash.com/photo-1568602471122-7832951cc4c5?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
-                alt="User avatar"
-              />
-              <AvatarFallback>AM</AvatarFallback>
-            </Avatar>
-            <span className="ml-2 text-sm font-medium hidden md:block">
-              Alex Morgan
-            </span>
-          </div>
+          <AuthButtons />
         </div>
       </div>
     </header>
