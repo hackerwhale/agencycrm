@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Client } from "@shared/schema";
+import { Client, ServiceTypes } from "@shared/schema";
 import {
   Table,
   TableBody,
@@ -162,6 +162,7 @@ export default function Clients() {
                 <TableRow className="border-b dark:border-neutral-700">
                   <TableHead className="text-neutral-500 dark:text-neutral-400 font-medium">Client</TableHead>
                   <TableHead className="text-neutral-500 dark:text-neutral-400 font-medium">Contact</TableHead>
+                  <TableHead className="text-neutral-500 dark:text-neutral-400 font-medium">Service</TableHead>
                   <TableHead className="text-neutral-500 dark:text-neutral-400 font-medium">Status</TableHead>
                   <TableHead className="text-neutral-500 dark:text-neutral-400 font-medium">Projects</TableHead>
                   <TableHead className="text-neutral-500 dark:text-neutral-400 font-medium">Actions</TableHead>
@@ -219,6 +220,20 @@ export default function Clients() {
                       <div className="text-neutral-500 dark:text-neutral-400 text-xs">{client.email}</div>
                       {client.phone && (
                         <div className="text-neutral-500 dark:text-neutral-400 text-xs">{client.phone}</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                        {client.service === ServiceTypes.WEB_DESIGN 
+                          ? 'Web Design' 
+                          : client.service === ServiceTypes.SEO 
+                            ? 'SEO' 
+                            : client.service === ServiceTypes.SOCIAL_MEDIA
+                              ? 'Social Media'
+                              : 'Custom'}
+                      </Badge>
+                      {client.service === ServiceTypes.CUSTOM && client.customService && (
+                        <div className="text-neutral-500 dark:text-neutral-400 text-xs mt-1">{client.customService}</div>
                       )}
                     </TableCell>
                     <TableCell className="py-3">

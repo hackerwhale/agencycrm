@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertClientSchema } from "@shared/schema";
+import { insertClientSchema, ServiceTypes } from "@shared/schema";
 import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -26,6 +26,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // Extend the schema with validation
 const clientFormSchema = insertClientSchema.extend({
@@ -59,8 +66,18 @@ export function ClientForm({ open, onOpenChange, defaultValues, clientId }: Clie
       address: "",
       notes: "",
       status: "active",
+      service: ServiceTypes.WEB_DESIGN,
+      customService: "",
     },
   });
+  
+  // Show/hide custom service field based on service selection
+  const [showCustomService, setShowCustomService] = useState(false);
+  
+  useEffect(() => {
+    const serviceValue = form.watch("service");
+    setShowCustomService(serviceValue === ServiceTypes.CUSTOM);
+  }, [form.watch("service")]);
 
   const createClientMutation = useMutation({
     mutationFn: async (data: ClientFormValues) => {
@@ -242,6 +259,52 @@ export function ClientForm({ open, onOpenChange, defaultValues, clientId }: Clie
                 </FormItem>
               )}
             />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="service"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Service Type</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select service type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value={ServiceTypes.WEB_DESIGN}>Web Design</SelectItem>
+                        <SelectItem value={ServiceTypes.SEO}>SEO</SelectItem>
+                        <SelectItem value={ServiceTypes.SOCIAL_MEDIA}>Social Media Management</SelectItem>
+                        <SelectItem value={ServiceTypes.CUSTOM}>Custom Service</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              {showCustomService && (
+                <FormField
+                  control={form.control}
+                  name="customService"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Custom Service Details</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Describe custom service" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
             
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
