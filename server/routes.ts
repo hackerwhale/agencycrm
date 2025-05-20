@@ -27,9 +27,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // API routes for clients
-  app.get("/api/clients", async (_req: Request, res: Response) => {
+  app.get("/api/clients", isAuthenticated, async (req: any, res: Response) => {
     try {
-      const clients = await storage.getClients();
+      const userId = req.user.claims.sub;
+      const clients = await storage.getClients(userId);
       res.json(clients);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch clients", error: (error as Error).message });
@@ -54,8 +55,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/clients", async (req: Request, res: Response) => {
+  app.post("/api/clients", isAuthenticated, async (req: any, res: Response) => {
     try {
+      const userId = req.user.claims.sub;
       const validation = insertClientSchema.safeParse(req.body);
       if (!validation.success) {
         return res.status(400).json({ 
@@ -64,7 +66,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const newClient = await storage.createClient(validation.data);
+      const newClient = await storage.createClient(validation.data, userId);
       res.status(201).json(newClient);
     } catch (error) {
       res.status(500).json({ message: "Failed to create client", error: (error as Error).message });
@@ -119,9 +121,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // API routes for projects
-  app.get("/api/projects", async (_req: Request, res: Response) => {
+  app.get("/api/projects", isAuthenticated, async (req: any, res: Response) => {
     try {
-      const projects = await storage.getProjects();
+      const userId = req.user.claims.sub;
+      const projects = await storage.getProjects(userId);
       res.json(projects);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch projects", error: (error as Error).message });
@@ -238,9 +241,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // API routes for payments
-  app.get("/api/payments", async (_req: Request, res: Response) => {
+  app.get("/api/payments", isAuthenticated, async (req: any, res: Response) => {
     try {
-      const payments = await storage.getPayments();
+      const userId = req.user.claims.sub;
+      const payments = await storage.getPayments(userId);
       res.json(payments);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch payments", error: (error as Error).message });
@@ -387,10 +391,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // API routes for activities
-  app.get("/api/activities", async (req: Request, res: Response) => {
+  app.get("/api/activities", isAuthenticated, async (req: any, res: Response) => {
     try {
+      const userId = req.user.claims.sub;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
-      const activities = await storage.getActivities(limit);
+      const activities = await storage.getActivities(userId, limit);
       res.json(activities);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch activities", error: (error as Error).message });

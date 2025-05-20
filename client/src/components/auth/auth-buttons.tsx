@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LogOut, User } from "lucide-react";
+import { User as UserType } from "@shared/schema";
 
 export function AuthButtons() {
   const { user, isAuthenticated } = useAuth();
@@ -36,24 +37,26 @@ export function AuthButtons() {
     );
   }
 
+  const userObj = user as UserType;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
           <Avatar className="h-10 w-10 border">
-            <AvatarImage src={user?.profileImageUrl || ""} alt={user?.firstName || "User"} />
-            <AvatarFallback>{getInitials(`${user?.firstName || ""} ${user?.lastName || ""}`)}</AvatarFallback>
+            <AvatarImage src={userObj.profileImageUrl || ""} alt={userObj.firstName || "User"} />
+            <AvatarFallback>{getInitials(`${userObj.firstName || ""} ${userObj.lastName || ""}`)}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <div className="flex items-center justify-start gap-2 p-2">
           <div className="flex flex-col space-y-1 leading-none">
-            {user?.firstName && user?.lastName && (
-              <p className="font-medium">{user.firstName} {user.lastName}</p>
+            {userObj.firstName && userObj.lastName && (
+              <p className="font-medium">{userObj.firstName} {userObj.lastName}</p>
             )}
-            {user?.email && (
-              <p className="text-sm text-muted-foreground">{user.email}</p>
+            {userObj.email && (
+              <p className="text-sm text-muted-foreground">{userObj.email}</p>
             )}
           </div>
         </div>
