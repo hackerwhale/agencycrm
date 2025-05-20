@@ -403,9 +403,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // API route for dashboard statistics
-  app.get("/api/dashboard/stats", async (_req: Request, res: Response) => {
+  app.get("/api/dashboard/stats", isAuthenticated, async (req: any, res: Response) => {
     try {
-      const stats = await storage.getDashboardStats();
+      const userId = req.user.claims.sub;
+      const stats = await storage.getDashboardStats(userId);
       res.json(stats);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch dashboard stats", error: (error as Error).message });

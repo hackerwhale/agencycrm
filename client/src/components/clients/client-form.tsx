@@ -225,7 +225,7 @@ export function ClientForm({ open, onOpenChange, defaultValues, clientId }: Clie
                 <FormItem>
                   <FormLabel>Website</FormLabel>
                   <FormControl>
-                    <Input placeholder="Website URL" {...field} />
+                    <Input placeholder="Website URL" {...field} value={field.value || ""} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -239,7 +239,7 @@ export function ClientForm({ open, onOpenChange, defaultValues, clientId }: Clie
                 <FormItem>
                   <FormLabel>Address</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Company address" {...field} rows={2} />
+                    <Textarea placeholder="Company address" {...field} value={field.value || ""} rows={2} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -253,7 +253,7 @@ export function ClientForm({ open, onOpenChange, defaultValues, clientId }: Clie
                 <FormItem>
                   <FormLabel>Additional Notes</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Additional notes about the client" {...field} rows={3} />
+                    <Textarea placeholder="Additional notes about the client" {...field} value={field.value || ""} rows={3} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -297,7 +297,7 @@ export function ClientForm({ open, onOpenChange, defaultValues, clientId }: Clie
                     <FormItem>
                       <FormLabel>Custom Service Details</FormLabel>
                       <FormControl>
-                        <Input placeholder="Describe custom service" {...field} />
+                        <Input placeholder="Describe custom service" {...field} value={field.value || ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
